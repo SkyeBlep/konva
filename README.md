@@ -2,12 +2,51 @@
 
 Fork of Konva for my project.  This fork adds z-order support, so you can set absolute z-orders even between groups:
 
-[![npm version](AbsoluteRenderOrderGroupExample.png)](AbsoluteRenderOrderGroupExample.png)
+[![example](AbsoluteRenderOrderGroupExample.png)](AbsoluteRenderOrderGroupExample.png)
+
+It works by adding a zOrder property to all Nodes, and a special kind of group `AbsoluteRenderOrderGroup` that reads
+and understands this property for all children.
+ 
+Note -- in order to maintain masking behavior, cached groups are respected and treated as a single object at the group's designated z-order.
+
+## Example
+
+```javascript
+const absoluteRenderOrderGroupTest = new Konva.AbsoluteRenderOrderGroup({
+	x: 0,
+	y: 0
+});
+layer.add(absoluteRenderOrderGroupTest);
+
+const redRect = new Konva.Rect({
+	x: 0,
+	y: 0,
+	width: 100,
+	height: 100,
+	fill: 'red',
+	zOrder: 10 // <------- on top
+});
+absoluteRenderOrderGroupTest.add(redRect);
+
+const blueRect = new Konva.Rect({
+	x: 50,
+	y: 50,
+	width: 100,
+	height: 100,
+	fill: 'blue',
+	zOrder: 0 // <-------- on bottom
+});
+absoluteRenderOrderGroupTest.add(blueRect);
+```
+
+## Repo Layout
 
 The master branch I'm using for my project and is where the rebuilt files are.  If you're looking to just grab the 
 z-order changes and apply them, there is a pull request branch for that (zOrder) which doesn't include the other stuff 
 like the build konva.js and konva.min.js.
 
+---
+Original Konva details follow
 ---
 
 <p align="center">
