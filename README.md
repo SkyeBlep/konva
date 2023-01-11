@@ -1,3 +1,15 @@
+# Skye's Konva Fork
+
+Fork of Konva for my project.  This fork adds z-order support, so you can set absolute z-orders even between groups:
+
+[![npm version](AbsoluteRenderOrderGroupExample.png)](AbsoluteRenderOrderGroupExample.png)
+
+The master branch I'm using for my project and is where the rebuilt files are.  If you're looking to just grab the 
+z-order changes and apply them, there is a pull request branch for that (zOrder) which doesn't include the other stuff 
+like the build konva.js and konva.min.js.
+
+---
+
 <p align="center">
   <img src="https://konvajs.org/android-chrome-192x192.png" alt="Konva logo" height="180" />
 </p>

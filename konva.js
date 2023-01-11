@@ -8,7 +8,7 @@
    * Konva JavaScript Framework v8.4.0
    * http://konvajs.org/
    * Licensed under the MIT
-   * Date: Thu Jan 05 2023
+   * Date: Tue Jan 10 2023
    *
    * Original work Copyright (C) 2011 - 2013 by Eric Rowell (KineticJS)
    * Modified work Copyright (C) 2014 - present by Anton Lavrenov (Konva)
@@ -5233,6 +5233,23 @@
    * node.draggable(false);
    */
   addGetterSetter(Node, 'draggable', false, getBooleanValidator());
+  /**
+   * get/set z-order position.  Note that z-order is not the same as z-index.  Z-order is used with the
+   * AbsoluteRenderOrderContainer to recursively render child objects in an absolute z-order.  This field will otherwise
+   * be ignored.  Alternatively, you can use the z-index features to move an object within a particular group, relative to
+   * the other nodes in the group.
+   * @name Konva.Node#zOrder
+   * @method
+   * @param {Number} zOrder
+   * @returns {Object}
+   * @example
+   * // get z-order
+   * var z = node.zOrder();
+   *
+   * // set z-order
+   * node.zOrder(5);
+   */
+  addGetterSetter(Node, 'zOrder', 0, getNumberValidator());
   Factory.backCompat(Node, {
       rotateDeg: 'rotate',
       setRotationDeg: 'setRotation',
@@ -8835,6 +8852,136 @@
   Group.prototype.nodeType = 'Group';
   _registerNode(Group);
 
+  /**
+   * AbsoluteRenderOrderGroup constructor.  AbsoluteRenderOrderGroup is a special kind of Group that renders all of its
+   * children and subchildren recursively, in the order of the z-order parameter.
+   *
+   * In order to maintain masking behavior, cached groups are respected and treated as a single object at the group's
+   * designated z-order.
+   * @constructor
+   * @memberof Konva
+   * @augments Konva.Container
+   * @param {Object} config
+   * @param {Number} [config.x]
+     * @param {Number} [config.y]
+     * @param {Number} [config.width]
+     * @param {Number} [config.height]
+     * @param {Boolean} [config.visible]
+     * @param {Boolean} [config.listening] whether or not the node is listening for events
+     * @param {String} [config.id] unique id
+     * @param {String} [config.name] non-unique name
+     * @param {Number} [config.opacity] determines node opacity.  Can be any number between 0 and 1
+     * @param {Object} [config.scale] set scale
+     * @param {Number} [config.scaleX] set scale x
+     * @param {Number} [config.scaleY] set scale y
+     * @param {Number} [config.rotation] rotation in degrees
+     * @param {Object} [config.offset] offset from center point and rotation point
+     * @param {Number} [config.offsetX] set offset x
+     * @param {Number} [config.offsetY] set offset y
+     * @param {Boolean} [config.draggable] makes the node draggable.  When stages are draggable, you can drag and drop
+     *  the entire stage by dragging any portion of the stage
+     * @param {Number} [config.dragDistance]
+     * @param {Function} [config.dragBoundFunc]
+   * * @param {Object} [config.clip] set clip
+     * @param {Number} [config.clipX] set clip x
+     * @param {Number} [config.clipY] set clip y
+     * @param {Number} [config.clipWidth] set clip width
+     * @param {Number} [config.clipHeight] set clip height
+     * @param {Function} [config.clipFunc] set clip func
+
+   * @example
+   * var group = new Konva.Group();
+   */
+  class AbsoluteRenderOrderGroup extends Group {
+      _validateAdd(child) {
+          var type = child.getType();
+          if (type !== 'Group' && type !== 'Shape') {
+              Util.throw('You may only add groups and shapes to groups.');
+          }
+      }
+      _drawChildren(drawMethod, canvas, top) {
+          var context = canvas && canvas.getContext(), clipWidth = this.clipWidth(), clipHeight = this.clipHeight(), clipFunc = this.clipFunc(), hasClip = (clipWidth && clipHeight) || clipFunc;
+          const selfCache = top === this;
+          if (hasClip) {
+              context.save();
+              var transform = this.getAbsoluteTransform(top);
+              var m = transform.getMatrix();
+              context.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+              context.beginPath();
+              if (clipFunc) {
+                  clipFunc.call(this, context, this);
+              }
+              else {
+                  var clipX = this.clipX();
+                  var clipY = this.clipY();
+                  context.rect(clipX, clipY, clipWidth, clipHeight);
+              }
+              context.clip();
+              m = transform.copy().invert().getMatrix();
+              context.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+          }
+          var hasComposition = !selfCache &&
+              this.globalCompositeOperation() !== 'source-over' &&
+              drawMethod === 'drawScene';
+          if (hasComposition) {
+              context.save();
+              context._applyGlobalCompositeOperation(this);
+          }
+          // AbsoluteRenderOrderGroup differs from the standard container by ordering its children itself, instead of
+          // letting children call each.
+          let unorderedChildren = new Map();
+          // Add all children recursively to orderedChildren
+          this.addChildrenRecursivelyToMap(this, unorderedChildren);
+          // Sort children by zOrder
+          // ( https://stackoverflow.com/questions/31158902/is-it-possible-to-sort-a-es6-map-object )
+          let orderedChildren = new Map([...unorderedChildren].sort((a, b) => {
+              if (a[0] > b[0])
+                  return 1;
+              else if (a[0] == b[0])
+                  return 0;
+              else
+                  return -1;
+          }));
+          // Draw children in zOrder
+          for (const [zOrder, nodeArray] of orderedChildren) {
+              //console.log("Drawing " + zOrder);
+              for (const node of nodeArray) {
+                  //console.log(node)
+                  node[drawMethod](canvas, top);
+                  //console.log(node.toString())
+              }
+          }
+          if (hasComposition) {
+              context.restore();
+          }
+          if (hasClip) {
+              context.restore();
+          }
+      }
+      addChildrenRecursivelyToMap(node, orderedChildren) {
+          var _a;
+          let rootNode = this;
+          if (node == rootNode || // the AbsoluteRenderOrderGroup itself will always render using z-order logic, even if cached
+              (node instanceof Group && !node.isCached())) { // However, cached subgroups are considered to be just a regular object (this protects masking)
+              (_a = node.children) === null || _a === void 0 ? void 0 : _a.forEach(function (child) {
+                  rootNode.addChildrenRecursivelyToMap(child, orderedChildren);
+              });
+          }
+          else {
+              // Is a leaf / don't descend farther -- this can be added to children map
+              let zOrder = node.zOrder();
+              if (!orderedChildren.has(zOrder)) {
+                  orderedChildren.set(zOrder, new Array());
+              }
+              orderedChildren.get(zOrder).push(node); // I'd much prefer the [] syntax for clarity, but seems TS/JS doesn't seem to support it, ugh.
+          }
+      }
+  }
+  //AbsoluteRenderOrderGroup.prototype.nodeType = 'AbsoluteRenderOrderGroup';
+  // Node type appears to be either Shape or Group, so it doesn't seem like this should be set if we mirror how Shapes work?
+  AbsoluteRenderOrderGroup.prototype.className = 'AbsoluteRenderOrderGroup';
+  _registerNode(AbsoluteRenderOrderGroup);
+
   var now = (function () {
       if (glob.performance && glob.performance.now) {
           return function () {
@@ -9765,6 +9912,7 @@
       Layer,
       FastLayer,
       Group,
+      AbsoluteRenderOrderGroup,
       DD,
       Shape,
       shapes,
