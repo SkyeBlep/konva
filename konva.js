@@ -5,10 +5,10 @@
 })(this, (function () { 'use strict';
 
   /*
-   * Konva JavaScript Framework v8.4.0
+   * Konva JavaScript Framework v8.4.0-skye.2
    * http://konvajs.org/
    * Licensed under the MIT
-   * Date: Tue Jan 10 2023
+   * Date: Thu Jan 12 2023
    *
    * Original work Copyright (C) 2011 - 2013 by Eric Rowell (KineticJS)
    * Modified work Copyright (C) 2014 - present by Anton Lavrenov (Konva)
@@ -35,7 +35,7 @@
               : {};
   const Konva$2 = {
       _global: glob,
-      version: '8.4.0',
+      version: '8.4.0-skye.2',
       isBrowser: detectBrowser(),
       isUnminified: /param/.test(function (param) { }.toString()),
       dblClickWindow: 400,
@@ -4670,6 +4670,20 @@
           return Util.haveIntersection(screenRect, this.getClientRect());
       }
       /**
+       * Utility function to evaluate the zOrder of a node.  This differs from just checking the zOrder() as this function
+       * will check parents to inherit a zOrder value if this node does not have one set.  Otherwise, if no zOrders are set
+       * recursively, this will return 0 (this function will not return undefined).
+       * @returns {number}
+       */
+      evaluateZOrderRecursively() {
+          if (this.zOrder() != undefined)
+              return this.zOrder();
+          if (this.parent == null)
+              return 0;
+          else
+              return this.parent.evaluateZOrderRecursively();
+      }
+      /**
        * create node with JSON string or an Object.  De-serializtion does not generate custom
        *  shape drawing functions, images, or event handlers (this would make the
        *  serialized object huge).  If your app uses custom shapes, images, and
@@ -5238,9 +5252,14 @@
    * AbsoluteRenderOrderContainer to recursively render child objects in an absolute z-order.  This field will otherwise
    * be ignored.  Alternatively, you can use the z-index features to move an object within a particular group, relative to
    * the other nodes in the group.
+   *
+   * If not set (/set to undefined), the z-order of the parent (recursively) will be inherited.  If no z-orders are set
+   * through parents, the default z-order is 0.
+   *
+   * Higher z-orders will be rendered on top of lower z-orders.
    * @name Konva.Node#zOrder
    * @method
-   * @param {Number} zOrder
+   * @param {Number | undefined} zOrder
    * @returns {Object}
    * @example
    * // get z-order
@@ -5248,8 +5267,11 @@
    *
    * // set z-order
    * node.zOrder(5);
+   *
+   * // unset z-order
+   * node.zOrder(undefined);
    */
-  addGetterSetter(Node, 'zOrder', 0, getNumberValidator());
+  addGetterSetter(Node, 'zOrder', undefined, getNumberValidator());
   Factory.backCompat(Node, {
       rotateDeg: 'rotate',
       setRotationDeg: 'setRotation',
@@ -8969,10 +8991,13 @@
           }
           else {
               // Is a leaf / don't descend farther -- this can be added to children map
-              let zOrder = node.zOrder();
+              // Determine zOrder
+              let zOrder = node.evaluateZOrderRecursively();
+              // Add zOrder if needed
               if (!orderedChildren.has(zOrder)) {
                   orderedChildren.set(zOrder, new Array());
               }
+              // Add to the correct bucket of zOrders
               orderedChildren.get(zOrder).push(node); // I'd much prefer the [] syntax for clarity, but seems TS/JS doesn't seem to support it, ugh.
           }
       }
